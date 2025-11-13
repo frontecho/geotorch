@@ -2,8 +2,9 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -16,20 +17,20 @@ jobs:
         echo "清理前的磁盘空间:"
         df -h
         
-        # 删除不需要的软件
         sudo rm -rf /usr/share/dotnet
         sudo rm -rf /usr/local/lib/android
         sudo rm -rf /opt/ghc
         sudo rm -rf /opt/hostedtoolcache/CodeQL
         sudo rm -rf /usr/local/share/boost
         sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+        sudo rm -rf /usr/local/graalvm
+        sudo rm -rf /usr/local/.ghcup
+        sudo rm -rf /usr/local/share/powershell
+        sudo rm -rf /usr/local/share/chromium
+        sudo rm -rf /usr/local/lib/node_modules
         
-        # 清理 apt 缓存
         sudo apt-get clean
-        
-        # 清理 Docker
         sudo docker system prune -a -f
-        sudo docker volume prune -f
         
         echo "清理后的磁盘空间:"
         df -h
@@ -59,7 +60,7 @@ jobs:
           type=sha
           type=raw,value=latest
     
-    - name: Build and push to GHCR
+    - name: Build and push to GHCR only
       uses: docker/build-push-action@v5
       with:
         context: .
@@ -69,28 +70,25 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
     
-    - name: Check disk space before export
+    - name: Clear build cache immediately
       run: |
-        echo "导出前磁盘空间:"
+        echo "构建完成后的磁盘空间:"
+        df -h
+        
+        # 清理 Docker buildx 缓存
+        docker buildx prune -a -f
+        docker system prune -a -f --volumes
+        
+        echo "清理后的磁盘空间:"
         df -h
     
-    - name: Pull and export image
+    - name: Install tools
       run: |
-        echo "拉取镜像..."
-        docker pull ghcr.io/${{ github.repository }}:latest
+        # 安装 skopeo（用于直接操作 registry）
+        sudo apt-get update
+        sudo apt-get install -y skopeo
         
-        echo "导出并压缩..."
-        docker save ghcr.io/${{ github.repository }}:latest | gzip > /tmp/image.tar.gz
-        
-        echo "压缩完成，文件大小:"
-        ls -lh /tmp/image.tar.gz
-        
-        # 立即删除本地镜像释放空间
-        docker rmi ghcr.io/${{ github.repository }}:latest
-        docker system prune -a -f
-    
-    - name: Install rclone
-      run: |
+        # 安装 rclone
         curl https://rclone.org/install.sh | sudo bash
     
     - name: Configure rclone for Cloudflare R2
@@ -106,20 +104,34 @@ jobs:
         acl = private
         EOF
     
-    - name: Upload to Cloudflare R2
+    - name: Export and upload image using skopeo
       run: |
         SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
         DATE=$(date +%Y%m%d-%H%M%S)
-        FILENAME="docker-image-${DATE}-${SHORT_SHA}.tar.gz"
+        FILENAME="docker-image-${DATE}-${SHORT_SHA}.tar"
         
-        echo "上传到 R2: $FILENAME"
-        rclone copy /tmp/image.tar.gz r2:${{ secrets.R2_BUCKET_NAME }}/$FILENAME -v --progress
+        IMAGE="ghcr.io/${{ github.repository }}:latest"
+        
+        echo "使用 skopeo 直接从 registry 复制镜像..."
+        echo "磁盘空间:"
+        df -h
+        
+        # 使用 skopeo 直接复制到 docker-archive 格式，边导出边压缩边上传
+        skopeo copy \
+          --src-creds=${{ github.actor }}:${{ secrets.GITHUB_TOKEN }} \
+          docker://$IMAGE \
+          docker-archive:/tmp/temp-image.tar
+        
+        echo "导出完成，开始压缩和上传..."
+        
+        # 边压缩边上传到 R2
+        gzip -c /tmp/temp-image.tar | rclone rcat r2:${{ secrets.R2_BUCKET_NAME }}/${FILENAME}.gz -v --progress
         
         echo "上传完成!"
-        echo "FILENAME=$FILENAME" >> $GITHUB_ENV
+        echo "FILENAME=${FILENAME}.gz" >> $GITHUB_ENV
         
-        # 上传完立即删除本地文件
-        rm /tmp/image.tar.gz
+        # 清理临时文件
+        rm /tmp/temp-image.tar || true
     
     - name: Generate download info
       run: |
