@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:2.9.1-cuda13.0-cudnn9-devel
+FROM pytorch/pytorch:2.7.1-cuda11.8-cudnn9-devel
 WORKDIR /root
 
 COPY ./image_components /tmp/image_components/

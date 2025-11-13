@@ -48,6 +48,7 @@ EOF
 
     pip config set global.index-url https://mirrors.zju.edu.cn/pypi/web/simple
     
+    rm /etc/apt/sources.list.d/*
     apt-get update
     conda clean -i
     pip cache purge
