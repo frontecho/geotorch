@@ -108,7 +108,7 @@ jobs:
       run: |
         SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
         DATE=$(date +%Y%m%d-%H%M%S)
-        FILENAME="docker-image-${DATE}-${SHORT_SHA}.tar"
+        FILENAME="geotorch-${DATE}-${SHORT_SHA}.tar"
         
         IMAGE="ghcr.io/${{ github.repository }}:latest"
         
