@@ -1,0 +1,14 @@
+numpy
+pandas
+matplotlib
+scipy
+pyproj
+cartopy
+rasterio
+gmsh
+networkx
+torch
+torchvision
+torch_geometric
+tensorboard
+jupyterlab
