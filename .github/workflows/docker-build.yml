@@ -60,33 +60,19 @@ jobs:
           type=sha
           type=raw,value=latest
     
-    - name: Build and push to GHCR only
+    - name: Build and push to GHCR
       uses: docker/build-push-action@v5
       with:
         context: .
         push: true
+        load: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
     
-    - name: Clear build cache immediately
-      run: |
-        echo "构建完成后的磁盘空间:"
-        df -h
-        
-        # 清理 Docker buildx 缓存
-        docker buildx prune -a -f
-        docker system prune -a -f --volumes
-        
-        echo "清理后的磁盘空间:"
-        df -h
-    
     - name: Install tools
       run: |
-        # 安装 skopeo（用于直接操作 registry）
         sudo apt-get update
-        sudo apt-get install -y skopeo
-        
-        # 安装 rclone
+        sudo apt-get install -y pigz
         curl https://rclone.org/install.sh | sudo bash
     
     - name: Configure rclone for Cloudflare R2
@@ -102,34 +88,22 @@ jobs:
         acl = private
         EOF
     
-    - name: Export and upload image using skopeo
+    - name: Stream local image to R2
       run: |
         SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
         DATE=$(date +%Y%m%d-%H%M%S)
-        FILENAME="geotorch-${DATE}-${SHORT_SHA}.tar"
-        
+        FILENAME="geotorch-${DATE}-${SHORT_SHA}.tar.gz"
         IMAGE="ghcr.io/${{ github.repository }}:latest"
         
-        echo "使用 skopeo 直接从 registry 复制镜像..."
-        echo "磁盘空间:"
+        echo "开始从本地镜像流式导出到 R2..."
+        echo "当前磁盘空间:"
         df -h
         
-        # 使用 skopeo 直接复制到 docker-archive 格式，边导出边压缩边上传
-        skopeo copy \
-          --src-creds=${{ github.actor }}:${{ secrets.GITHUB_TOKEN }} \
-          docker://$IMAGE \
-          docker-archive:/tmp/temp-image.tar
+        # 直接从本地 Docker 镜像流式导出、压缩、上传（完全不占用磁盘）
+        docker save $IMAGE | pigz -p 2 | rclone rcat r2:${{ secrets.R2_BUCKET_NAME }}/${FILENAME} -v --progress
         
-        echo "导出完成，开始压缩和上传..."
-        
-        # 边压缩边上传到 R2
-        gzip -c /tmp/temp-image.tar | rclone rcat r2:${{ secrets.R2_BUCKET_NAME }}/${FILENAME}.gz -v --progress
-        
-        echo "上传完成!"
-        echo "FILENAME=${FILENAME}.gz" >> $GITHUB_ENV
-        
-        # 清理临时文件
-        rm /tmp/temp-image.tar || true
+        echo "流式上传完成!"
+        echo "FILENAME=${FILENAME}" >> $GITHUB_ENV
     
     - name: Generate download info
       run: |
