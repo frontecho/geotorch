@@ -3,7 +3,8 @@ WORKDIR /root
 
 COPY ./image_components /tmp/image_components/
 
-RUN apt-get install -y openssh-client \
+RUN apt-get update \
+    && apt-get install -y openssh-client \
     && apt-get install -y openssh-server \
     && mkdir -p /run/sshd \
     && /usr/bin/ssh-keygen -A \
