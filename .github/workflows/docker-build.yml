@@ -11,6 +11,29 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+    - name: Maximize build space
+      run: |
+        echo "清理前的磁盘空间:"
+        df -h
+        
+        # 删除不需要的软件
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo rm -rf /usr/local/share/boost
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+        
+        # 清理 apt 缓存
+        sudo apt-get clean
+        
+        # 清理 Docker
+        sudo docker system prune -a -f
+        sudo docker volume prune -f
+        
+        echo "清理后的磁盘空间:"
+        df -h
+    
     - name: Checkout code
       uses: actions/checkout@v4
     
@@ -38,7 +61,6 @@ jobs:
     
     - name: Build and push to GHCR
       uses: docker/build-push-action@v5
-      id: build
       with:
         context: .
         push: true
@@ -46,19 +68,26 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
-        outputs: type=docker,dest=/tmp/image.tar
     
-    - name: Compress Docker image
+    - name: Check disk space before export
       run: |
-        echo "Compressing image..."
-        gzip -c /tmp/image.tar > /tmp/image.tar.gz
+        echo "导出前磁盘空间:"
+        df -h
+    
+    - name: Pull and export image
+      run: |
+        echo "拉取镜像..."
+        docker pull ghcr.io/${{ github.repository }}:latest
         
-        echo "Original size:"
-        ls -lh /tmp/image.tar
-        echo "Compressed size:"
+        echo "导出并压缩..."
+        docker save ghcr.io/${{ github.repository }}:latest | gzip > /tmp/image.tar.gz
+        
+        echo "压缩完成，文件大小:"
         ls -lh /tmp/image.tar.gz
         
-        rm /tmp/image.tar
+        # 立即删除本地镜像释放空间
+        docker rmi ghcr.io/${{ github.repository }}:latest
+        docker system prune -a -f
     
     - name: Install rclone
       run: |
@@ -83,11 +112,14 @@ jobs:
         DATE=$(date +%Y%m%d-%H%M%S)
         FILENAME="docker-image-${DATE}-${SHORT_SHA}.tar.gz"
         
-        echo "Uploading to R2: $FILENAME"
+        echo "上传到 R2: $FILENAME"
         rclone copy /tmp/image.tar.gz r2:${{ secrets.R2_BUCKET_NAME }}/$FILENAME -v --progress
         
-        echo "Upload completed!"
+        echo "上传完成!"
         echo "FILENAME=$FILENAME" >> $GITHUB_ENV
+        
+        # 上传完立即删除本地文件
+        rm /tmp/image.tar.gz
     
     - name: Generate download info
       run: |
