@@ -143,6 +143,6 @@ jobs:
         echo '```' >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### R2 Backup" >> $GITHUB_STEP_SUMMARY
-        echo "- Bucket: \`${{ secrets.R2_BUCKET_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- Bucket: \`${{ vars.R2_BUCKET_NAME }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- File: \`${{ env.FILENAME }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
