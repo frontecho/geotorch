@@ -67,6 +67,8 @@ jobs:
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
     
     - name: Clear build cache immediately
       run: |
@@ -123,7 +125,7 @@ jobs:
         echo "导出完成，开始压缩和上传..."
         
         # 边压缩边上传到 R2
-        gzip -c /tmp/temp-image.tar | rclone rcat r2:${{ secrets.R2_BUCKET_NAME }}/${FILENAME}.gz -v --progress
+        gzip -c /tmp/temp-image.tar | rclone rcat r2:${{ vars.R2_BUCKET_NAME }}/${FILENAME}.gz -v --progress
         
         echo "上传完成!"
         echo "FILENAME=${FILENAME}.gz" >> $GITHUB_ENV
