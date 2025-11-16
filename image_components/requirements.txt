@@ -2,6 +2,7 @@ numpy
 pandas
 matplotlib
 scipy
+scikit-learn
 pyproj
 cartopy
 rasterio

@@ -114,7 +114,7 @@ jobs:
         echo "磁盘空间:"
         df -h
         
-        # 使用 skopeo 直接复制到 docker-archive 格式，边导出边压缩边上传
+        # 使用 skopeo 直接导出到 docker-archive 格式
         skopeo copy \
           --src-creds=${{ github.actor }}:${{ secrets.GITHUB_TOKEN }} \
           docker://$IMAGE \
